@@ -15,7 +15,31 @@ enum NodeType {
 
 struct Problem {
     rows: Vec<Vec<usize>>,
-    cols: Vec<Vec<usize>>
+    cols: Vec<Vec<usize>>,
+    n_filled_in_row: Vec<usize>,
+    n_filled_in_col: Vec<usize>
+}
+
+impl Problem {
+    fn new(rows: Vec<Vec<usize>>, cols: Vec<Vec<usize>>) -> Problem {
+        let mut n_filled_in_row = Vec::new();
+        let mut n_filled_in_col = Vec::new();
+
+        for row in &rows {
+            n_filled_in_row.push(row.iter().sum());
+        }
+
+        for col in &cols {
+            n_filled_in_col.push(col.iter().sum());
+        }
+
+        Problem{
+            rows,
+            cols,
+            n_filled_in_row,
+            n_filled_in_col
+        }
+    }
 }
 
 #[derive(PartialEq, Debug)]
@@ -71,23 +95,23 @@ fn get_features(state: &Vec<i8>) -> Features {
     let mut islands = Vec::with_capacity(state.len() / 2);
     let mut n_unknown = 0;
     
-    let mut last_known = -1;
+    let mut last = -1;
 
     for i in 0..state.len() {
-        match (last_known, state[i]) {
+        match (last, state[i]) {
             (0, 0) => { n_unknown+=1; },
-            (0, 1) => { n_filled+=1; islands.push(1); last_known = state[i]},
-            (0, -1) => { last_known = state[i]; },
+            (0, 1) => { n_filled+=1; islands.push(1); last = state[i]},
+            (0, -1) => { last = state[i]; },
             (1, 0) => { n_unknown+=1;},
-            (1, 1) => { n_filled +=1; *islands.last_mut().unwrap()+=1; last_known = state[i];},
-            (1, -1) => { last_known = state[i]; },
-            (-1, 1) => {n_filled+=1; islands.push(1); last_known = state[i]; },
-            (-1, 0) => {n_unknown+=1;},
-            (-1, -1) => {last_known = state[i];},
+            (1, 1) => { n_filled +=1; *islands.last_mut().unwrap()+=1; last = state[i];},
+            (1, -1) => { last = state[i]; },
+            (-1, 1) => { n_filled+=1; islands.push(1); last = state[i]; },
+            (-1, 0) => { n_unknown+=1;},
+            (-1, -1) => { last = state[i];},
             (_, _) => {}
         }
 
-        last_known = state[i];
+        last = state[i];
     }
 
     Features{
@@ -109,16 +133,19 @@ fn get_axis_constraints<'a>(pb: &'a Problem, index: usize, axis: &Axis) -> Vec<u
 }
 
 fn get_expected_n_filled<'a>(pb: &'a Problem, index: usize, axis: &Axis) -> usize {
-    let axis_constraints = get_axis_constraints(pb, index, axis);
-
-    axis_constraints.iter().fold(0, |acc, &x| acc + if x > 0 { x } else { 0 } as usize)
+    match axis {
+        Axis::ROW => pb.n_filled_in_row[index],
+        Axis::COL => pb.n_filled_in_col[index]
+    }  
 }
 
+/*
 fn get_expected_n_islands<'a>(pb: &'a Problem, index: usize, axis: &Axis) -> usize {
-    let axis_constraints = get_axis_constraints(pb, index, axis);
-
-    axis_constraints.len()
-}
+    match axis {
+        Axis::ROW => pb.rows[index].len(),
+        Axis::COL => pb.cols[index].len()
+    }  
+}*/
 
 fn get_axis<'a>(board: &Array2::<i8>, index: usize, axis: &Axis) -> Vec<i8> {
     match axis {
@@ -136,8 +163,8 @@ fn get<'a>(node: &'a Node, j:usize, axis: &Axis) -> i8 {
 
 fn set<'a>(board: &mut Array2::<i8>, value: i8, index: usize, sub_index: usize, axis: &Axis) {
     match axis {
-        Axis::ROW => {let prev = board[[index, sub_index]]; assert!(prev == value || prev == 0); board[[index, sub_index]] = value;},
-        Axis::COL => {let prev = board[[sub_index, index]]; assert!(prev == value || prev == 0); board[[sub_index, index]] = value; }
+        Axis::ROW => {board[[index, sub_index]] = value;},
+        Axis::COL => {board[[sub_index, index]] = value; }
     }
 }
 
@@ -146,12 +173,6 @@ fn get_axis_size<'a>(pb: &Problem, axis: &Axis) -> usize {
         Axis::ROW => pb.cols.len(),
         Axis::COL => pb.rows.len(),
     }
-}
-
-fn get_remaining_choices(board: &Array2::<i8>, index: usize, axis: &Axis) -> usize {
-    let axis = get_axis(board, index, axis);     // TODO: do better bookkeeping
-
-    axis.iter().fold(0, |sum, &x| sum + if x == 0 { 1 } else { 0 } as usize)
 }
 
 fn expand<'a>(node: &'a Node, pb: &'a Problem, board: &Array2::<i8>, index: usize, axis: &Axis) -> Vec::<Node> {
@@ -254,10 +275,12 @@ fn is_admissible<'a>(node: &'a Node, pb: &'a Problem, index: usize, axis: &Axis)
     {
         //println!("\torthogonal..");
 
-        let expected_n_ortho_filled = get_expected_n_filled(pb, node.ortho_index, &get_orthogonal_axis(axis)); // do better bookkeeping!
+        let axis = &get_orthogonal_axis(axis);
+
+        let expected_n_ortho_filled = get_expected_n_filled(pb, node.ortho_index, axis); // do better bookkeeping!
         
         if node.ortho_features.n_unknown == 0 {
-            let constraints = get_axis_constraints(pb, node.ortho_index, &get_orthogonal_axis(axis));
+            let constraints = get_axis_constraints(pb, node.ortho_index, axis);
 
             admissible_in_ortho_direction = constraints == node.ortho_features.islands;
 
@@ -303,13 +326,12 @@ fn generate_candidates<'a>(pb: &'a Problem, board: &Array2::<i8>, index: usize, 
 
         //println!("POP");
         //print_node(&node);
-
-        let successors = expand(&node, pb, board, index, axis);
-
-        stack.extend(successors);
-
         if node.axis_features.n_unknown == 0 {
             candidates.push(node);
+        }
+        else {
+            let successors = expand(&node, pb, board, index, axis);
+            stack.extend(successors);
         }
     }
 
@@ -383,61 +405,51 @@ use std::vec;
 use super::*;
 
 fn create_simple_problem() -> Problem {
-    Problem {
-        rows: vec![vec![3], vec![1, 1, 1], vec![3], vec![1, 1], vec![1, 1]],
-        cols: vec![vec![1, 1], vec![1, 2], vec![3], vec![1, 2], vec![1, 1]],
-
-    }
+    Problem::new( 
+        vec![vec![3], vec![1, 1, 1], vec![3], vec![1, 1], vec![1, 1]],
+        vec![vec![1, 1], vec![1, 2], vec![3], vec![1, 2], vec![1, 1]] )
 }
 
 fn create_simple_6x6_problem() -> Problem {
-    Problem {
-        rows: vec![vec![2,1], vec![1, 3], vec![1,2], vec![3], vec![4], vec![1]],
-        cols: vec![vec![1], vec![5], vec![2], vec![5], vec![2, 1], vec![2]],
-
-    }
+    Problem::new( 
+        vec![vec![2,1], vec![1, 3], vec![1,2], vec![3], vec![4], vec![1]],
+        vec![vec![1], vec![5], vec![2], vec![5], vec![2, 1], vec![2]])
 }
 
 fn create_medium_problem() -> Problem {
-    Problem {
-        rows: vec![vec![3], vec![3, 1], vec![2, 1, 1], vec![4, 1], vec![3, 1, 1], vec![2, 1], vec![3]],
-        cols: vec![vec![3], vec![5], vec![2, 4], vec![4, 1], vec![1, 1, 1], vec![1, 1], vec![3]]
-    }
+    Problem::new(
+        vec![vec![3], vec![3, 1], vec![2, 1, 1], vec![4, 1], vec![3, 1, 1], vec![2, 1], vec![3]],
+        vec![vec![3], vec![5], vec![2, 4], vec![4, 1], vec![1, 1, 1], vec![1, 1], vec![3]])
 }
 
 fn create_medium_10x10_problem() -> Problem {
-    Problem {
-        rows: vec![vec![4], vec![1, 1], vec![1, 4, 1], vec![4, 4], vec![1, 5, 1], vec![4, 4], vec![3, 2, 3], vec![3, 2, 3], vec![4, 4], vec![10]],
-        cols: vec![vec![7], vec![2, 5], vec![1, 5], vec![4, 2], vec![1, 1, 2, 1], vec![3, 1, 2, 1], vec![1, 4, 2], vec![1, 7], vec![4, 5], vec![7]]
-    }
+    Problem::new(
+        vec![vec![4], vec![1, 1], vec![1, 4, 1], vec![4, 4], vec![1, 5, 1], vec![4, 4], vec![3, 2, 3], vec![3, 2, 3], vec![4, 4], vec![10]],
+        vec![vec![7], vec![2, 5], vec![1, 5], vec![4, 2], vec![1, 1, 2, 1], vec![3, 1, 2, 1], vec![1, 4, 2], vec![1, 7], vec![4, 5], vec![7]])
 }
 
 fn create_problem_10101() -> Problem {
-    Problem {
-        rows: vec![vec![1, 1, 1]],
-        cols: vec![vec![1], vec![], vec![1], vec![], vec![1]]
-    }
+    Problem::new(
+        vec![vec![1, 1, 1]],
+        vec![vec![1], vec![], vec![1], vec![], vec![1]])
 }
 
 fn create_problem_11111() -> Problem {
-    Problem {
-        rows: vec![vec![5]],
-        cols: vec![vec![1], vec![1], vec![1], vec![1], vec![1]]
-    }
+    Problem::new(
+        vec![vec![5]],
+        vec![vec![1], vec![1], vec![1], vec![1], vec![1]])
 }
 
 fn create_problem_110001() -> Problem {
-    Problem {
-        rows: vec![vec![2, 1]],
-        cols: vec![vec![1], vec![1], vec![], vec![], vec![], vec![1]]
-    }
+    Problem::new(
+        vec![vec![2, 1]],
+        vec![vec![1], vec![1], vec![], vec![], vec![], vec![1]])
 }
 
 fn create_problem_10100_11111() -> Problem {
-    Problem {
-        rows: vec![vec![1, 1], vec![5]],
-        cols: vec![vec![2], vec![1], vec![2], vec![1], vec![1]]
-    }
+    Problem::new( 
+        vec![vec![1, 1], vec![5]],
+        vec![vec![2], vec![1], vec![2], vec![1], vec![1]])
 }
 
 #[test]
