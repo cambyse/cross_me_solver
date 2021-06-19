@@ -255,19 +255,19 @@ fn generate_candidates<'a>(pb: &'a Problem, board: &Array2::<i8>, index: usize, 
     };
 
     // generate hypothesis
-    let mut stack = VecDeque::new();
-    stack.push_back(node);
+    let mut queue = VecDeque::new();
+    queue.push_back(node);
 
     let mut candidates = Vec::new();
 
-    while !stack.is_empty() {
-        let node = stack.pop_front().unwrap();
+    while !queue.is_empty() {
+        let node = queue.pop_front().unwrap();
 
         if node.axis_features.n_unknown == 0 {
             candidates.push(node);
         }
         else {
-            stack.extend(expand(&node, pb, board, index, axis));
+            queue.extend(expand(&node, pb, board, index, axis));
         }
     }
 
