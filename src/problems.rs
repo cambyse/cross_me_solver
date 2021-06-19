@@ -5,55 +5,55 @@ use std::collections::VecDeque;
 
 use crate::solver::*;
 
-fn create_simple_problem() -> Problem {
+pub fn create_simple_problem() -> Problem {
     Problem::new( 
         vec![vec![3], vec![1, 1, 1], vec![3], vec![1, 1], vec![1, 1]],
         vec![vec![1, 1], vec![1, 2], vec![3], vec![1, 2], vec![1, 1]] )
 }
 
-fn create_simple_6x6_problem() -> Problem {
+pub fn create_simple_6x6_problem() -> Problem {
     Problem::new( 
         vec![vec![2,1], vec![1, 3], vec![1,2], vec![3], vec![4], vec![1]],
         vec![vec![1], vec![5], vec![2], vec![5], vec![2, 1], vec![2]])
 }
 
-fn create_medium_problem() -> Problem {
+pub fn create_medium_problem() -> Problem {
     Problem::new(
         vec![vec![3], vec![3, 1], vec![2, 1, 1], vec![4, 1], vec![3, 1, 1], vec![2, 1], vec![3]],
         vec![vec![3], vec![5], vec![2, 4], vec![4, 1], vec![1, 1, 1], vec![1, 1], vec![3]])
 }
 
-fn create_medium_10x10_problem() -> Problem {
+pub fn create_medium_10x10_problem() -> Problem {
     Problem::new(
         vec![vec![4], vec![1, 1], vec![1, 4, 1], vec![4, 4], vec![1, 5, 1], vec![4, 4], vec![3, 2, 3], vec![3, 2, 3], vec![4, 4], vec![10]],
         vec![vec![7], vec![2, 5], vec![1, 5], vec![4, 2], vec![1, 1, 2, 1], vec![3, 1, 2, 1], vec![1, 4, 2], vec![1, 7], vec![4, 5], vec![7]])
 }
 
-fn create_problem_10101() -> Problem {
+pub fn create_problem_10101() -> Problem {
     Problem::new(
         vec![vec![1, 1, 1]],
         vec![vec![1], vec![], vec![1], vec![], vec![1]])
 }
 
-fn create_problem_11111() -> Problem {
+pub fn create_problem_11111() -> Problem {
     Problem::new(
         vec![vec![5]],
         vec![vec![1], vec![1], vec![1], vec![1], vec![1]])
 }
 
-fn create_problem_110001() -> Problem {
+pub fn create_problem_110001() -> Problem {
     Problem::new(
         vec![vec![2, 1]],
         vec![vec![1], vec![1], vec![], vec![], vec![], vec![1]])
 }
 
-fn create_problem_10100_11111() -> Problem {
+pub fn create_problem_10100_11111() -> Problem {
     Problem::new( 
         vec![vec![1, 1], vec![5]],
         vec![vec![2], vec![1], vec![2], vec![1], vec![1]])
 }
 
-fn def_2_29() -> Problem {
+pub fn def_2_29() -> Problem {
     let rows = vec![
         vec![2,4,2],
         vec![6],
