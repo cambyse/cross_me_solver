@@ -2,7 +2,10 @@ use ndarray::prelude::*;
 use std::fmt::Debug;
 use std::vec::Vec;
 use std::collections::VecDeque;
-use crate::problems::*;
+
+// TODO:
+// 1/ min/max bounds for number of islands
+// 2/ order rows and cols by priorities
 
 enum Axis {
     ROW,
@@ -87,10 +90,6 @@ impl Features {
         }
     }
 }
-
-// TODO:
-// 1/ min/max bounds for number of islands
-// order rows and cols by priorities
 
 struct Node {
     node_type: NodeType,
@@ -335,8 +334,7 @@ pub fn print_board(board: &Board) {
 #[cfg(test)]
 mod tests {
 
-use std::vec;
-
+use crate::problems::*;
 use super::*;
 
 #[test]
