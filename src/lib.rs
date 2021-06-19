@@ -1,5 +1,5 @@
 #[macro_use]
 extern crate ndarray;
 
-pub mod problem;
-
+pub mod problems;
+pub mod solver;

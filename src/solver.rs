@@ -13,15 +13,15 @@ enum NodeType {
     REGULAR
 }
 
-struct Problem {
-    rows: Vec<Vec<usize>>,
-    cols: Vec<Vec<usize>>,
+pub struct Problem {
+    pub rows: Vec<Vec<usize>>,
+    pub cols: Vec<Vec<usize>>,
     n_filled_in_row: Vec<usize>,
     n_filled_in_col: Vec<usize>
 }
 
 impl Problem {
-    fn new(rows: Vec<Vec<usize>>, cols: Vec<Vec<usize>>) -> Problem {
+    pub fn new(rows: Vec<Vec<usize>>, cols: Vec<Vec<usize>>) -> Problem {
         let mut n_filled_in_row = Vec::new();
         let mut n_filled_in_col = Vec::new();
 
@@ -42,13 +42,13 @@ impl Problem {
     }
 }
 
-struct Board {
+pub struct Board {
     board: Array2::<i8>,
     n_unknown: usize
 }
 
 impl Board {
-    fn new(n: usize, m:usize) -> Self {
+    pub fn new(n: usize, m:usize) -> Self {
         Self{
             board: Array2::<i8>::zeros((n, m)),
             n_unknown: n * m
@@ -87,7 +87,9 @@ impl Features {
     }
 }
 
-// Idea optimistic and pessimistic islands!
+// TODO:
+// 1/ min/max bounds for number of islands
+// order rows and cols by priorities
 
 struct Node {
     node_type: NodeType,
@@ -233,7 +235,7 @@ fn is_admissible(features: &Features, constraints: &Vec<usize>, expected_n_fille
         0 => features.islands == *constraints,
         _ => {
             // heuristic to prune early on bad candidates
-            features.n_filled <= expected_n_filled && features.n_filled + features.n_unknown >= expected_n_filled
+            features.n_filled <= expected_n_filled && features.n_filled + features.n_unknown >= expected_n_filled// && features.islands.len() + features.n_unknown / 2 + 1 >= constraints.len()
         }
     }
 }
@@ -294,6 +296,7 @@ fn step_on_axis<'a>(pb: &'a Problem, board: &mut Board, ortho_index: usize, axis
 
                 board.set(value, axis_index, ortho_index, axis);
                 board.n_unknown -= 1;
+                //println!("board.n_unknown:{}", board.n_unknown);
             }
         }
     }
@@ -311,16 +314,16 @@ fn step_on_board<'a>(pb: &'a Problem, board: &mut Board) {
     }
 }
 
-fn solve<'a>(pb: &'a Problem, board: &mut Board) {
+pub fn solve<'a>(pb: &'a Problem, board: &mut Board) {
     while board.n_unknown > 0 {
         step_on_board(pb, board);
     }
 }
 
-fn print_board(board: &Array2::<i8>) {
-    for i in 0..board.nrows() {
-        for j in 0..board.ncols() {
-            print!("{}", if board[[i, j]] == 1 { 35 as char } else { 32 as char });
+pub fn print_board(board: &Board) {
+    for i in 0..board.board.nrows() {
+        for j in 0..board.board.ncols() {
+            print!("{}", if board.board[[i, j]] == 1 { 35 as char } else { 32 as char });
         }
         print!("\n");
     }
@@ -381,6 +384,143 @@ fn create_problem_10100_11111() -> Problem {
     Problem::new( 
         vec![vec![1, 1], vec![5]],
         vec![vec![2], vec![1], vec![2], vec![1], vec![1]])
+}
+
+fn def_2_29() -> Problem {
+    let rows = vec![
+        vec![2,4,2],
+        vec![6],
+        vec![5,4],
+        vec![2,2],
+        vec![1,1,1,1],
+
+        vec![1,1],
+        vec![1,4,1],
+        vec![1,2,1],
+        vec![1,1],
+        vec![1,6,1],
+    ];
+
+    let cols = vec![
+        vec![1,1,2,1],
+        vec![1,4,1],
+        vec![3,1],
+        vec![3,1,1,1],
+        vec![3,2,1],
+
+        vec![2,2,1],
+        vec![3,1,1,1],
+        vec![3,1],
+        vec![1,4,1],
+        vec![1,1,2,1],
+    ];
+
+    Problem::new(rows, cols)
+}
+
+fn def_4_1() -> Problem {
+    let rows = vec![
+        vec![4],
+        vec![5],
+        vec![2,3],
+        vec![3,3,1],
+        vec![3,3,3],
+
+        vec![3,3,3],
+        vec![3,3,2],
+        vec![3,6],
+        vec![3,4],
+        vec![6],
+
+        vec![1,5],
+        vec![3,6],
+        vec![5,3],
+        vec![3,3],
+        vec![2],
+    ];
+
+    let cols = rows.clone();
+    Problem::new(rows, cols)
+}
+
+fn def_5_392() -> Problem {
+    let rows = vec![
+        vec![7,3],
+        vec![3,2,5,2],
+        vec![2,2,2,1,5],
+        vec![1,2,6,7],
+        vec![3,1,3,6,6],
+
+        vec![1,2,1,1,5,2,4],
+        vec![2,1,2,4,6,4,4],
+        vec![3,4,2,1,6,3],
+        vec![1,5,2,2,4,3],
+        vec![2,1,4,2,1,5,4,2],
+
+        vec![6,1,4,3,6,4,2],
+        vec![8,2,3,4,7,3,2],
+        vec![8,3,4,7,3,1],
+        vec![9,1,2,5,7,3],
+        vec![9,1,3,4,7,2,2],
+
+        vec![11,1,2,5,7,1,2],
+        vec![5,2,1,2,2,5,5,1,2],
+        vec![2,1,1,1,2,5,3,2],
+        vec![2,2,3,2,2,2],
+        vec![3,4,2],
+    ];
+
+    let cols = vec![
+        vec![1],
+        vec![2],
+        vec![2],
+        vec![1,3],
+        vec![2,4],
+
+        vec![2,4],
+        vec![7],
+        vec![2,7,1],
+        vec![1,1,8],
+        vec![1,7],
+
+        vec![2,5],
+        vec![2,3],
+        vec![1,3],
+        vec![2,7,5],
+        vec![2,4,1,2],
+
+        vec![1,5,2,1],
+        vec![2,8,1,2],
+        vec![1,10,2],
+        vec![1,6,3],
+        vec![1,2,3,3,2],
+
+        vec![1,3,1,7,1],
+        vec![1,1,1,1,8],
+        vec![2,1,3,8],
+        vec![6,2,6],
+        vec![7,3,4],
+
+        vec![1,4,6,3],
+        vec![2,4,8,1],
+        vec![2,2,1,9],
+        vec![3,1,1,9],
+        vec![1,1,3,9],
+
+        vec![2,4,8],
+        vec![4,5,4,1],
+        vec![4,7,1,1],
+        vec![4,8,1],
+        vec![5,6,1],
+
+        vec![6,1,2,2],
+        vec![9,1,2],
+        vec![6,4,1],
+        vec![2,2],
+        vec![1],
+    ];
+
+    Problem::new(rows, cols)
 }
 
 #[test]
@@ -450,7 +590,7 @@ fn test_problem_10100_11111() {
     // solve
     solve(&pb, &mut board);
 
-    print_board(&board.board);
+    print_board(&board);
 }
 
 #[test]
@@ -461,7 +601,7 @@ fn test_solve_simple_problem() {
 
     solve(&pb, &mut board);
 
-    print_board(&board.board);
+    print_board(&board);
 }
 
 #[test]
@@ -472,7 +612,7 @@ fn test_solve_simple_6x6_problem() {
 
     solve(&pb, &mut board);
 
-    print_board(&board.board);
+    print_board(&board);
 }
 
 #[test]
@@ -483,7 +623,7 @@ fn test_solve_medium_problem() {
 
     solve(&pb, &mut board);
 
-    print_board(&board.board);
+    print_board(&board);
 }
 
 #[test]
@@ -494,7 +634,41 @@ fn test_solve_medium_10x10_problem() {
 
     solve(&pb, &mut board);
 
-    print_board(&board.board);
+    print_board(&board);
 }
+
+#[test]
+fn test_solve_2_29() {
+    let pb = def_2_29();
+
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
+
+    solve(&pb, &mut board);
+
+    print_board(&board);
+}
+
+#[test]
+fn test_solve_4_1() {
+    let pb = def_4_1();
+
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
+
+    solve(&pb, &mut board);
+
+    print_board(&board);
+}
+
+/*
+#[test]
+fn test_solve_5_392() {
+    let pb = def_5_392();
+
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
+
+    solve(&pb, &mut board);
+
+    print_board(&board.board);
+}*/
 
 }

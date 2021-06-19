@@ -1,10 +1,12 @@
-use cross_me_solver::problem::*;
+use cross_me_solver::solver::*;
+use cross_me_solver::problems::*;
 
 fn main() {
-    //let mut board = Array2::zeros((10, 10));
-    //board[[1, 1]] = 7;
+    let pb = def_4_1();
 
-    //println!("board:{}", board);
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
 
-    println!("Hello, world!");
+    solve(&pb, &mut board);
+
+    print_board(&board);
 }
