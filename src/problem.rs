@@ -42,6 +42,34 @@ impl Problem {
     }
 }
 
+struct Board {
+    board: Array2::<i8>,
+    n_unknown: usize
+}
+
+impl Board {
+    fn new(n: usize, m:usize) -> Self {
+        Self{
+            board: Array2::<i8>::zeros((n, m)),
+            n_unknown: n * m
+        }
+    }
+
+    fn set(&mut self, value: i8, axis_index: usize, ortho_index: usize, axis: &Axis) {
+        match axis {
+            Axis::ROW => {self.board[[ortho_index, axis_index]] = value;},
+            Axis::COL => {self.board[[axis_index, ortho_index]] = value;}
+        }
+    }
+
+    fn get(&mut self, axis_index: usize, ortho_index: usize, axis: &Axis) -> i8 {
+        match axis {
+            Axis::ROW => {self.board[[ortho_index, axis_index]]},
+            Axis::COL => {self.board[[axis_index, ortho_index]]}
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 struct Features {
     n_filled: usize,
@@ -121,10 +149,10 @@ fn get_orthogonal_axis<'a>(axis: &Axis) -> Axis {
     }   
 }
 
-fn get_axis_constraints<'a>(pb: &'a Problem, index: usize, axis: &Axis) -> Vec<usize> {
+fn get_axis_constraints<'a>(pb: &'a Problem, index: usize, axis: &Axis) -> &'a Vec<usize> {
     match axis {
-        Axis::ROW => pb.rows[index].clone(),
-        Axis::COL => pb.cols[index].clone()
+        Axis::ROW => &pb.rows[index],
+        Axis::COL => &pb.cols[index]
     }   
 }
 
@@ -150,24 +178,38 @@ fn get_axis<'a>(board: &Array2::<i8>, index: usize, axis: &Axis) -> Vec<i8> {
     }
 }
 
-fn get<'a>(node: &'a Node, j:usize, axis: &Axis) -> i8 {
-    match axis {
-        Axis::ROW => node.state[j],
-        Axis::COL => node.ortho_state[j],
-    }
-}
-
-fn set<'a>(board: &mut Array2::<i8>, value: i8, index: usize, sub_index: usize, axis: &Axis) {
-    match axis {
-        Axis::ROW => {board[[index, sub_index]] = value;},
-        Axis::COL => {board[[sub_index, index]] = value; }
-    }
-}
-
 fn get_axis_size<'a>(pb: &Problem, axis: &Axis) -> usize {
     match axis {
         Axis::ROW => pb.cols.len(),
         Axis::COL => pb.rows.len(),
+    }
+}
+
+fn add_hypothesis_if_admissible<'a>(hypothesis: i8, node: &'a Node, pb: &'a Problem, board: &Array2::<i8>, axis_index: usize, ortho_index: usize, axis: &Axis, successors: &mut Vec::<Node>) {
+    // First generate hypothesis in axis direction
+    let mut state = node.state.clone();
+    state[axis_index] = hypothesis;
+    let axis_features = get_features(&state);
+
+    if is_admissible(&axis_features, get_axis_constraints(pb, ortho_index, axis), get_expected_n_filled(pb, ortho_index, axis)) {
+        // Second, if valid, generate hypothesis in ortho direction
+        let ortho_axis = &get_orthogonal_axis(axis);
+        let mut ortho_state = get_axis(board, axis_index, &get_orthogonal_axis(axis));
+        ortho_state[ortho_index] = hypothesis;
+        let ortho_features = get_features(&ortho_state);
+
+        if is_admissible(&ortho_features, get_axis_constraints(pb, axis_index, ortho_axis), get_expected_n_filled(pb, axis_index, ortho_axis)) {
+            // Add to successors if all constraints fullfilled
+            successors.push(
+                Node{
+                    node_type: NodeType::REGULAR,
+                    state,
+                    axis_index,
+                    ortho_state,
+                    axis_features,
+                    ortho_features}
+                );
+        }
     }
 }
 
@@ -176,61 +218,17 @@ fn expand<'a>(node: &'a Node, pb: &'a Problem, board: &Array2::<i8>, ortho_index
         NodeType::ROOT => { get_next_to_expand(&node.state, 0) },
         _ => { get_next_to_expand(&node.state, node.axis_index + 1) }
     };
-    
-    if node.axis_features.n_unknown == 0 {
-        return vec![];
-    }
 
     let mut successors = Vec::<Node>::new();
      
     // empty hypothesis
-    let mut state = node.state.clone();
-    state[axis_index] = -1;
-    let mut ortho_state = get_axis(board, axis_index, &get_orthogonal_axis(axis));
-    ortho_state[ortho_index] = -1;
-    let axis_features = get_features(&state);
-    let ortho_features = get_features(&ortho_state);
+    add_hypothesis_if_admissible(-1, node, pb, board, axis_index, ortho_index, axis, &mut successors);
+    add_hypothesis_if_admissible(1, node, pb, board, axis_index, ortho_index, axis, &mut successors);
     
-    if is_admissible(&axis_features, &ortho_features, pb, axis_index, ortho_index, axis) {
-        successors.push(
-            Node{
-                node_type: NodeType::REGULAR,
-                state,
-                axis_index,
-                ortho_state,
-                axis_features,
-                ortho_features}
-            );
-    }
-
-    //println!("Empty hypothesis:");
-    //print_node(&empty_hypothesis);
-
-
-    // fill hypothesis
-    let mut state = node.state.clone();
-    state[axis_index] = 1;
-    let mut ortho_state = get_axis(board, axis_index, &get_orthogonal_axis(axis));
-    ortho_state[ortho_index] = 1;
-    let axis_features = get_features(&state);
-    let ortho_features = get_features(&ortho_state);
-    
-    if is_admissible(&axis_features, &ortho_features, pb, axis_index, ortho_index, axis) {
-        successors.push(
-            Node{
-                node_type: NodeType::REGULAR,
-                state,
-                axis_index,
-                ortho_state,
-                axis_features,
-                ortho_features}
-            );
-    }
-
     successors
 }
 
-fn is_admissible_inner(features: &Features, constraints: &Vec<usize>, expected_n_filled: usize) -> bool {
+fn is_admissible(features: &Features, constraints: &Vec<usize>, expected_n_filled: usize) -> bool {
     match features.n_unknown {
         0 => features.islands == *constraints,
         _ => {
@@ -238,23 +236,6 @@ fn is_admissible_inner(features: &Features, constraints: &Vec<usize>, expected_n
             features.n_filled <= expected_n_filled && features.n_filled + features.n_unknown >= expected_n_filled
         }
     }
-}
-
-fn is_admissible<'a>(axis_features: &Features, ortho_features: &Features, pb: &'a Problem, axis_index: usize, ortho_index: usize, axis: &Axis) -> bool {    
-    // check is admissible in axis direction
-    let mut admissible = is_admissible_inner(
-        axis_features,
-        &get_axis_constraints(pb, ortho_index, axis),
-        get_expected_n_filled(pb, ortho_index, axis));
-    
-    // check is admissible in ortho direction
-    let ortho_axis = &get_orthogonal_axis(axis);
-    admissible = admissible && is_admissible_inner(
-        ortho_features,
-        &get_axis_constraints(pb, axis_index, ortho_axis), 
-        get_expected_n_filled(pb, axis_index, ortho_axis));
-
-    admissible
 }
 
 fn generate_candidates<'a>(pb: &'a Problem, board: &Array2::<i8>, index: usize, axis: &Axis) -> Vec<Node> {
@@ -280,64 +261,58 @@ fn generate_candidates<'a>(pb: &'a Problem, board: &Array2::<i8>, index: usize, 
     while !stack.is_empty() {
         let node = stack.pop_front().unwrap();
 
-        //println!("POP");
-        //print_node(&node);
         if node.axis_features.n_unknown == 0 {
             candidates.push(node);
         }
         else {
-            let successors = expand(&node, pb, board, index, axis);
-            stack.extend(successors);
+            stack.extend(expand(&node, pb, board, index, axis));
         }
     }
 
     candidates  
 }
 
-fn step_on_line<'a>(pb: &'a Problem, board: &mut Array2::<i8>, index: usize, axis: &Axis) {
+fn step_on_axis<'a>(pb: &'a Problem, board: &mut Board, ortho_index: usize, axis: &Axis) {
     // generate hypothesis
-    let candidates = generate_candidates(pb, board, index, axis);
+    let candidates = generate_candidates(pb, &board.board, ortho_index, axis);
 
     // candidates
     //for node in &candidates {
     //    print!("candidate:{:?} ", node.state);
     //}
 
-    for j in 0..get_axis_size(pb, axis) {
-        let mut consensus = true;
-        for i in 1..candidates.len() {
-            consensus = consensus && (candidates[i-1].state[j] == candidates[i].state[j])
-        }
+    for axis_index in 0..get_axis_size(pb, axis) {
+        if board.get(axis_index, ortho_index, axis) == 0 && !candidates.is_empty() {
+            let mut consensus = true;
+            for i in 1..candidates.len() {
+                consensus = consensus && (candidates[i-1].state[axis_index] == candidates[i].state[axis_index])
+            }
 
-        if consensus && !candidates.is_empty() { // TODO: don't set if already set?
-            let witness = candidates.first().unwrap();
-            let value = witness.state[j];
+            if consensus {
+                let witness = candidates.first().unwrap();
+                let value = witness.state[axis_index];
 
-            //println!("set value:{} {} <- {}", index, j, value);
-
-            set(board, value, index, j, axis)
+                board.set(value, axis_index, ortho_index, axis);
+                board.n_unknown -= 1;
+            }
         }
     }
 
-    println!("board:\n{:?}", board);
+    //println!("board:\n{:?}", board);
 }
 
-fn step_on_board<'a>(pb: &'a Problem, board: &mut Array2::<i8>) {
-    //println!("ROWS");
-    for i in 0..board.nrows() {
-        println!("row[{}]", i);
-        step_on_line(pb, board, i, &Axis::ROW);
+fn step_on_board<'a>(pb: &'a Problem, board: &mut Board) {
+    for i in 0..board.board.nrows() {
+        step_on_axis(pb, board, i, &Axis::ROW);
     }
 
-    //println!("COLS");
-    for j in 0..board.ncols() {
-        println!("col[{}]", j);
-        step_on_line(pb, board, j, &Axis::COL);
+    for j in 0..board.board.ncols() {
+        step_on_axis(pb, board, j, &Axis::COL);
     }
 }
 
-fn solve<'a>(pb: &'a Problem, board: &mut Array2::<i8>) {
-    while board.iter().any(|&e| e==0) {
+fn solve<'a>(pb: &'a Problem, board: &mut Board) {
+    while board.n_unknown > 0 {
         step_on_board(pb, board);
     }
 }
@@ -470,56 +445,56 @@ fn test_problem_110001_with_prefilled_board() {
 fn test_problem_10100_11111() {
     let pb = create_problem_10100_11111();
 
-    let mut board = Array2::<i8>::zeros((pb.rows.len(), pb.cols.len()));
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
   
     // solve
     solve(&pb, &mut board);
 
-    print_board(&board);
+    print_board(&board.board);
 }
 
 #[test]
 fn test_solve_simple_problem() {
     let pb = create_simple_problem();
 
-    let mut board = Array2::<i8>::zeros((pb.rows.len(), pb.cols.len()));
+    let mut board = Board::new(pb.rows.len(), pb.cols.len());
 
     solve(&pb, &mut board);
 
-    print_board(&board);
+    print_board(&board.board);
 }
 
 #[test]
 fn test_solve_simple_6x6_problem() {
     let pb = create_simple_6x6_problem();
 
-    let mut board = Array2::<i8>::zeros((pb.rows.len(), pb.cols.len()));
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
 
     solve(&pb, &mut board);
 
-    print_board(&board);
+    print_board(&board.board);
 }
 
 #[test]
 fn test_solve_medium_problem() {
     let pb = create_medium_problem();
 
-    let mut board = Array2::<i8>::zeros((pb.rows.len(), pb.cols.len()));
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
 
     solve(&pb, &mut board);
 
-    print_board(&board);
+    print_board(&board.board);
 }
 
 #[test]
 fn test_solve_medium_10x10_problem() {
     let pb = create_medium_10x10_problem();
 
-    let mut board = Array2::<i8>::zeros((pb.rows.len(), pb.cols.len()));
+    let mut board = Board::new(pb.rows.len(),pb.cols.len());
 
     solve(&pb, &mut board);
 
-    print_board(&board);
+    print_board(&board.board);
 }
 
 }
