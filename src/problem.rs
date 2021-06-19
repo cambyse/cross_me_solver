@@ -63,16 +63,12 @@ impl Features {
 
 struct Node {
     node_type: NodeType,
-    // expansion state
-    axis_index: usize,
+    
     state: Vec<i8>,
-    ortho_index: usize,
+    axis_index: usize, // index of expanded element in axis direction
     ortho_state: Vec<i8>,
-
-    // features in axis dir
+    
     axis_features: Features,
-
-    // features in orthogonal dir
     ortho_features: Features
 }
 
@@ -81,7 +77,7 @@ fn print_node(node: &Node) {
         node.ortho_features.islands, node.ortho_features.n_filled, node.ortho_features.n_unknown);
 }
 
-fn get_to_expand(state: &Vec<i8>, start_index: usize) -> usize {
+fn get_next_to_expand(state: &Vec<i8>, start_index: usize) -> usize {
     for i in start_index..state.len() {
         if state[i] == 0 {
             return i
@@ -175,10 +171,10 @@ fn get_axis_size<'a>(pb: &Problem, axis: &Axis) -> usize {
     }
 }
 
-fn expand<'a>(node: &'a Node, pb: &'a Problem, board: &Array2::<i8>, index: usize, axis: &Axis) -> Vec::<Node> {
-    let ortho_index = match node.node_type {
-        NodeType::ROOT => { get_to_expand(&node.state, 0) },
-        _ => { get_to_expand(&node.state, node.ortho_index + 1) }
+fn expand<'a>(node: &'a Node, pb: &'a Problem, board: &Array2::<i8>, ortho_index: usize, axis: &Axis) -> Vec::<Node> {
+    let axis_index = match node.node_type {
+        NodeType::ROOT => { get_next_to_expand(&node.state, 0) },
+        _ => { get_next_to_expand(&node.state, node.axis_index + 1) }
     };
     
     if node.axis_features.n_unknown == 0 {
@@ -188,116 +184,77 @@ fn expand<'a>(node: &'a Node, pb: &'a Problem, board: &Array2::<i8>, index: usiz
     let mut successors = Vec::<Node>::new();
      
     // empty hypothesis
-
     let mut state = node.state.clone();
-    state[ortho_index] = -1;
-    let mut ortho_state = get_axis(board, ortho_index, &get_orthogonal_axis(axis));
-    ortho_state[node.axis_index] = -1;
+    state[axis_index] = -1;
+    let mut ortho_state = get_axis(board, axis_index, &get_orthogonal_axis(axis));
+    ortho_state[ortho_index] = -1;
     let axis_features = get_features(&state);
     let ortho_features = get_features(&ortho_state);
     
-    let empty_hypothesis = Node{
-        node_type: NodeType::REGULAR,
-        axis_index: node.axis_index,
-        state,
-        ortho_index,
-        ortho_state,
-        axis_features,
-        ortho_features
-    };
+    if is_admissible(&axis_features, &ortho_features, pb, axis_index, ortho_index, axis) {
+        successors.push(
+            Node{
+                node_type: NodeType::REGULAR,
+                state,
+                axis_index,
+                ortho_state,
+                axis_features,
+                ortho_features}
+            );
+    }
 
     //println!("Empty hypothesis:");
     //print_node(&empty_hypothesis);
 
-    if is_admissible(&empty_hypothesis, pb, index, axis) {
-        successors.push(empty_hypothesis);
-    }
-
 
     // fill hypothesis
     let mut state = node.state.clone();
-    state[ortho_index] = 1;
-    let mut ortho_state = get_axis(board, ortho_index, &get_orthogonal_axis(axis));
-    ortho_state[node.axis_index] = 1;
+    state[axis_index] = 1;
+    let mut ortho_state = get_axis(board, axis_index, &get_orthogonal_axis(axis));
+    ortho_state[ortho_index] = 1;
     let axis_features = get_features(&state);
     let ortho_features = get_features(&ortho_state);
-
-    let filled_hypothesis = Node{
-        node_type: NodeType::REGULAR,
-        axis_index: node.axis_index,
-        state,
-        ortho_index,
-        ortho_state,
-        axis_features,
-        ortho_features
-    };
-
-    //println!("Fill hypothesis:");
-    //print_node(&filled_hypothesis);
-
-    if is_admissible(&filled_hypothesis, pb, index, axis) {
-        successors.push(filled_hypothesis);
+    
+    if is_admissible(&axis_features, &ortho_features, pb, axis_index, ortho_index, axis) {
+        successors.push(
+            Node{
+                node_type: NodeType::REGULAR,
+                state,
+                axis_index,
+                ortho_state,
+                axis_features,
+                ortho_features}
+            );
     }
 
     successors
 }
 
-fn is_admissible<'a>(node: &'a Node, pb: &'a Problem, index: usize, axis: &Axis) -> bool {    
-    // in axis drection
-    let mut admissible_in_axis_direction = true;
-    {
-        //println!("\tlongitudinal..");
-
-        let expected_n_filled = get_expected_n_filled(pb, index, axis); // do better bookkeeping!
-        //let expected_n_islands = get_expected_n_islands(pb, index, axis);
-
-        if node.axis_features.n_unknown == 0 {
-            let constraints = get_axis_constraints(pb, index, axis);
-
-            admissible_in_axis_direction = constraints == node.axis_features.islands;
-
-            //println!("\t\tis_finished: {:?}", constraints);
-        }
-        else {
-            //admissible_in_axis_direction = admissible_in_axis_direction && node.axis_features.n_islands <= expected_n_islands;
-            admissible_in_axis_direction = admissible_in_axis_direction && node.axis_features.n_filled <= expected_n_filled;
-            admissible_in_axis_direction = admissible_in_axis_direction && node.axis_features.n_filled + node.axis_features.n_unknown >= expected_n_filled;
-
-            //println!("\t\tnode.n_islands <= expected_n_islands: {}", node.axis_features.n_islands <= expected_n_islands);
-            //println!("\t\tnode.n_filled <= expected_n_filled: {}", node.axis_features.n_filled <= expected_n_filled);
-            //println!("\t\tnode.n_filled + node.n_unknown >= expected_n_filled: {}", node.axis_features.n_filled + node.axis_features.n_unknown >= expected_n_filled);
+fn is_admissible_inner(features: &Features, constraints: &Vec<usize>, expected_n_filled: usize) -> bool {
+    match features.n_unknown {
+        0 => features.islands == *constraints,
+        _ => {
+            // heuristic to prune early on bad candidates
+            features.n_filled <= expected_n_filled && features.n_filled + features.n_unknown >= expected_n_filled
         }
     }
+}
 
-    // in orthogonal direction
-    let mut admissible_in_ortho_direction = true;
+fn is_admissible<'a>(axis_features: &Features, ortho_features: &Features, pb: &'a Problem, axis_index: usize, ortho_index: usize, axis: &Axis) -> bool {    
+    // check is admissible in axis direction
+    let mut admissible = is_admissible_inner(
+        axis_features,
+        &get_axis_constraints(pb, ortho_index, axis),
+        get_expected_n_filled(pb, ortho_index, axis));
+    
+    // check is admissible in ortho direction
+    let ortho_axis = &get_orthogonal_axis(axis);
+    admissible = admissible && is_admissible_inner(
+        ortho_features,
+        &get_axis_constraints(pb, axis_index, ortho_axis), 
+        get_expected_n_filled(pb, axis_index, ortho_axis));
 
-    {
-        //println!("\torthogonal..");
-
-        let axis = &get_orthogonal_axis(axis);
-
-        let expected_n_ortho_filled = get_expected_n_filled(pb, node.ortho_index, axis); // do better bookkeeping!
-        
-        if node.ortho_features.n_unknown == 0 {
-            let constraints = get_axis_constraints(pb, node.ortho_index, axis);
-
-            admissible_in_ortho_direction = constraints == node.ortho_features.islands;
-
-            //println!("\t\tis_ortho_finished: {:?}", constraints);
-        }
-        else {
-            admissible_in_ortho_direction = admissible_in_ortho_direction && node.ortho_features.n_filled <= expected_n_ortho_filled;
-            admissible_in_ortho_direction = admissible_in_ortho_direction && node.ortho_features.n_filled + node.ortho_features.n_unknown >= expected_n_ortho_filled;
-
-            //println!("\t\tnode.n_filled <= expected_n_filled: {}", node.ortho_features.n_filled <= expected_n_ortho_filled);
-            //println!("\t\tnode.n_filled + node.n_unknown >= expected_n_filled: {}", node.ortho_features.n_filled + node.ortho_features.n_unknown >= expected_n_ortho_filled);
-        }
-    }
-
-    //println!("\t{}", admissible_in_axis_direction && admissible_in_ortho_direction);
-
-    admissible_in_axis_direction && admissible_in_ortho_direction
+    admissible
 }
 
 fn generate_candidates<'a>(pb: &'a Problem, board: &Array2::<i8>, index: usize, axis: &Axis) -> Vec<Node> {
@@ -307,9 +264,8 @@ fn generate_candidates<'a>(pb: &'a Problem, board: &Array2::<i8>, index: usize, 
     let ortho_features = get_features(&ortho_state);
     let node = Node{
         node_type: NodeType::ROOT,
-        axis_index: index,
         state,
-        ortho_index : 0,
+        axis_index : 0,
         ortho_state,
         axis_features,
         ortho_features
